@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: wallpaper-backend
-    env: python
-    buildCommand: ""
-    startCommand: gunicorn app:app
-    envVars:
-      - key: MONGO_URI
-        value: your-mongo-uri-here
