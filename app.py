@@ -18,7 +18,7 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Pixabay API key (replace this with your actual key)
-PIXABAY_API_KEY = 'YOUR_PIXABAY_API_KEY'
+PIXABAY_API_KEY = '47849701-73acc40f5327790e47c2f6a81'
 
 
 # Manual upload endpoint
