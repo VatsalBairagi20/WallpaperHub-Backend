@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
 import os
+import requests
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -16,6 +17,11 @@ wallpapers_collection = db['wallpapers']
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Pixabay API key (replace this with your actual key)
+PIXABAY_API_KEY = 'YOUR_PIXABAY_API_KEY'
+
+
+# Manual upload endpoint
 @app.route('/api/upload-wallpaper', methods=['POST'])
 def upload_wallpaper():
     try:
@@ -52,10 +58,14 @@ def upload_wallpaper():
         print('UPLOAD ERROR:', str(e))
         return jsonify({'error': 'Something went wrong'}), 500
 
+
+# Serve uploaded files
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
+
+# Get all wallpapers
 @app.route('/api/get-wallpapers', methods=['GET'])
 def get_wallpapers():
     try:
@@ -67,6 +77,8 @@ def get_wallpapers():
         print('GET WALLPAPERS ERROR:', str(e))
         return jsonify({'error': 'Failed to fetch wallpapers'}), 500
 
+
+# Get all categories
 @app.route('/api/get-categories', methods=['GET'])
 def get_categories():
     try:
@@ -76,6 +88,51 @@ def get_categories():
     except Exception as e:
         print('GET CATEGORIES ERROR:', str(e))
         return jsonify({'error': 'Failed to fetch categories'}), 500
+
+
+# Auto-fetch wallpapers from Pixabay and auto-create category
+@app.route('/api/fetch-wallpapers', methods=['POST'])
+def fetch_wallpapers():
+    try:
+        data = request.get_json()
+        query = data.get('query', '').strip()
+        device = data.get('device', 'PC')
+
+        if not query:
+            return jsonify({'error': 'Query/category is missing'}), 400
+
+        url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&per_page=10"
+        res = requests.get(url)
+        wallpapers = res.json().get('hits', [])
+
+        if not wallpapers:
+            return jsonify({'error': 'No wallpapers found'}), 404
+
+        added = 0
+        for wp in wallpapers:
+            image_url = wp.get('largeImageURL')
+            name = wp.get('tags', 'Wallpaper')
+
+            # Avoid duplicates
+            exists = wallpapers_collection.find_one({'image_url': image_url})
+            if exists:
+                continue
+
+            wallpapers_collection.insert_one({
+                'name': name,
+                'description': f'Auto-fetched for {query}',
+                'category': query,
+                'device': device,
+                'image_url': image_url
+            })
+            added += 1
+
+        return jsonify({'message': f'{added} wallpapers added to category "{query}"'}), 200
+
+    except Exception as e:
+        print('FETCH ERROR:', str(e))
+        return jsonify({'error': 'Failed to fetch wallpapers'}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
