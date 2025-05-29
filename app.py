@@ -1,22 +1,26 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
-import os
 from werkzeug.utils import secure_filename
+import os
+import uuid
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# MongoDB config
+# MongoDB configuration
 client = MongoClient('mongodb+srv://VatsalBairagi:Vatsal2004@vatsal.vgheuph.mongodb.net/')
 db = client['final_wallpaper']
 wallpapers_collection = db['wallpapers']
 
-# Folder to store uploaded images
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Image upload folder setup (absolute path)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Upload endpoint
+# Upload wallpaper endpoint
 @app.route('/api/upload-wallpaper', methods=['POST'])
 def upload_wallpaper():
     try:
@@ -36,10 +40,19 @@ def upload_wallpaper():
         if not image:
             return jsonify({'error': 'No image uploaded'}), 400
 
-        filename = secure_filename(image.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        image.save(filepath)
+        # Create a unique filename
+        filename = f"{uuid.uuid4().hex}_{secure_filename(image.filename)}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
+        print(f"[INFO] Saving image to: {filepath}")
+
+        try:
+            image.save(filepath)
+        except Exception as e:
+            print("[ERROR] Failed to save image:", e)
+            return jsonify({'error': 'Failed to save image'}), 500
+
+        # Save metadata in MongoDB
         wallpapers_collection.insert_one({
             'name': name,
             'description': description,
@@ -49,14 +62,15 @@ def upload_wallpaper():
         })
 
         return jsonify({'message': 'Wallpaper uploaded successfully!'}), 200
+
     except Exception as e:
-        print('UPLOAD ERROR:', str(e))
+        print('[ERROR] Upload failed:', str(e))
         return jsonify({'error': 'Something went wrong'}), 500
 
-# Serve uploaded files
+# Serve uploaded images
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # Get all wallpapers
 @app.route('/api/get-wallpapers', methods=['GET'])
@@ -67,7 +81,7 @@ def get_wallpapers():
             wp['_id'] = str(wp['_id'])  # Convert ObjectId to string
         return jsonify({'wallpapers': wallpapers})
     except Exception as e:
-        print('GET WALLPAPERS ERROR:', str(e))
+        print('[ERROR] Failed to fetch wallpapers:', str(e))
         return jsonify({'error': 'Failed to fetch wallpapers'}), 500
 
 # Get all categories
@@ -78,9 +92,9 @@ def get_categories():
         categories = [cat for cat in categories if cat.strip() != '']
         return jsonify({'categories': categories})
     except Exception as e:
-        print('GET CATEGORIES ERROR:', str(e))
+        print('[ERROR] Failed to fetch categories:', str(e))
         return jsonify({'error': 'Failed to fetch categories'}), 500
 
-# Run the server
+# Start Flask server
 if __name__ == '__main__':
     app.run(debug=True)
